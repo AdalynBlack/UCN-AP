@@ -1,5 +1,6 @@
 from dataclasses import dataclass
-from Options import PerGameCommonOptions, Range, Toggle, ItemSet, DeathLink
+from Options import PerGameCommonOptions, Range, Toggle, ItemSet, DeathLink, Choice
+
 
 class ScoreRequiredHundreds(Range):
     """The high score required to win divided by 100.
@@ -86,6 +87,14 @@ class ExcludedCharacters(ItemSet):
     display_name = "Excluded Animatronics"
     rich_text_doc = True
 
+class DeathLinkAmnesty(Range):
+    """
+    The number of times you have to die to send a death link to everyone.
+    """
+    display_name = "Death Link Amnesty"
+    default = 3
+    range_start = 1
+    range_end = 10
 
 @dataclass
 class UCNOptions(PerGameCommonOptions):
@@ -98,3 +107,4 @@ class UCNOptions(PerGameCommonOptions):
     vanilla_dd: VanillaDD
     exclude_animatronics : ExcludedCharacters
     death_link: DeathLink
+    dl_amnesty: DeathLinkAmnesty

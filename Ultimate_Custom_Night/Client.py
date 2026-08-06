@@ -10,7 +10,6 @@ from .Items import trap_ids, item_data_table
 from .Locations import location_table, secret_scares
 from CommonClient import *
 
-
 class UCNCommandProcessor(ClientCommandProcessor):
     def __init__(self, ctx: CommonContext):
         super().__init__(ctx)
@@ -27,11 +26,10 @@ class UCNCommandProcessor(ClientCommandProcessor):
 
     def _cmd_set_path(self, directory: str):
         """Redirect to proper save data folder. Use this command if you're not on Windows before connecting!"""
-        if "CNAP" not in directory and directory != "":
-            self.ctx.save_path = f"{directory}/CNAP"
+        if "CNAP" in directory and directory != "":
+            self.ctx.save_path = directory[::-5]
         else:
             self.ctx.save_path = directory
-
         self.output(f"Changed to the following directory: {self.ctx.save_path}")
 
     def _cmd_check_path(self):
@@ -41,14 +39,7 @@ class UCNCommandProcessor(ClientCommandProcessor):
     def _cmd_resync(self):
         """Resync your client with the server. (Use if items didn't get added to game, or checks stop being sent. Items are only added if they aren't traps or filler)"""
         self.output("Resyncing client...")
-
-        for item in self.ctx.items_received:
-            item_name = self.ctx.item_names.lookup_in_game(item.item, "Ultimate Custom Night")
-            if item_data_table[item_name].type != ItemC.progression or item_data_table[item_name].type != ItemC.useful:
-                self.ctx.update_save(item_data_table[item_name].game_id)
-
-        if self.ctx.save_task is None or self.ctx.save_task.done():
-            self.ctx.save_task = asyncio.create_task(self.ctx.save_watcher(), name="save_watcher")
+        self.ctx.resync()
         self.output("Client resynced!")
 
 class UCNContext(CommonContext):
@@ -68,6 +59,8 @@ class UCNContext(CommonContext):
         self.just_connected = False
         self.items_handled = []
         self.deathlink_active = False
+        self.dl_deaths_required = 1
+        self.dl_progress = 0
         self.traps: Dict[str, int] = {
             f"{trap_id}s_{tracked}" : 0
             for trap_id in trap_ids
@@ -77,7 +70,7 @@ class UCNContext(CommonContext):
         self.notifications_inqueue: Dict[str, str] = {}
 
         if platform.system() == "Windows":
-            self.save_path = os.path.expandvars(r"%APPDATA%\MMFApplications\CNAP")
+            self.save_path = os.path.expandvars(r"%APPDATA%\MMFApplications")
 
         self.last_save_time = 0
         self.save_task = asyncio.create_task(self.save_watcher(), name="save_watcher")
@@ -98,12 +91,16 @@ class UCNContext(CommonContext):
 
             self.target_points = args["slot_data"]["target_points"]
             self.just_connected = True
-            self.load_save_data(args)
-            # if args["slot_data"]["vanilla_dd"]:
-            #     self.update_save("randomddactive")
-            #
-            # if args["slot_data"]["death_link"]:
-            #     async_start(self.enable_death_link())
+            self.load_client_save(args)
+            if args["slot_data"]["vanilla_dd"]:
+                self.update_save("randomddactive")
+
+            if args["slot_data"]["death_link"]:
+                self.deathlink_active = True
+                async_start(self.enable_death_link())
+
+            if args["slot_data"]["dl_amnesty"]:
+                self.dl_deaths_required = args["slot_data"]["dl_amnesty"]
 
         if cmd == "ReceivedItems":
             new_items = list(set(args['items']) - set(self.items_handled))
@@ -123,7 +120,8 @@ class UCNContext(CommonContext):
             logging_pairs = [
                 ("Client", "Archipelago")
             ]
-            base_title = "UCN Archipelago Client"
+            # TODO update version number every release
+            base_title = f"UCN Archipelago Client 0.1.1 | Archipelago"
 
         self.ui = UCNManager(self)
         self.ui_task = asyncio.create_task(self.ui.async_run(), name="UI")
@@ -131,8 +129,9 @@ class UCNContext(CommonContext):
     # watches the save file
     async def save_watcher(self):
         while not self.exit_event.is_set():
-            if os.path.exists(self.save_path):
-                mtime = os.path.getmtime(self.save_path)
+            path = f"{self.save_path}/CNAP"
+            if os.path.exists(path):
+                mtime = os.path.getmtime(path)
                 if self.just_connected or mtime != self.last_save_time:
                     await self.process_save_update()
 
@@ -158,6 +157,7 @@ class UCNContext(CommonContext):
 
         if "trap" in game_id:
             self.traps[f"{game_id}s_received"] += 1
+
             if (self.traps[f"{game_id}s_received"] - self.traps[f"{game_id}s_taken"]) >= 1:
                 self.update_save(game_id, item=item)
 
@@ -190,10 +190,10 @@ class UCNContext(CommonContext):
             self.just_connected = False
             self.checked_locations.add(501999)
 
-            await self.queue_received_traps(content)
+            await self.queue_received_traps()
 
             # Read highscore locations
-            score = int(content[2].split('=')[1])
+            score = int(content[1].split('=')[1])
             for i in range(int(score / 100)):
                 if i <= score:
                     self.checked_locations.add(502000 + i)
@@ -223,8 +223,15 @@ class UCNContext(CommonContext):
 
             # Check for death in game
             if "deathlinkactive=1" in content and "deathlinksend=1" in content:
+                self.dl_progress += 1
                 self.update_save("deathlinksend", "0")
-                await self.send_death(get_deathlink_msg(self.username, self.last_scare))
+                if self.dl_progress == self.dl_deaths_required:
+                    self.dl_progress = 0
+                    await self.send_death(get_deathlink_msg(self.username, self.last_scare))
+                else:
+                    logger.info(f"Death link progress: {self.dl_progress}/{self.dl_deaths_required}")
+
+                self.update_save("dl_progress", str(self.dl_progress), file="CNAPClient")
 
             if self.deahlink_start and "deathlinkstart=0" in content:
                 self.deahlink_start = False
@@ -233,29 +240,23 @@ class UCNContext(CommonContext):
                 await self.send_msgs([{"cmd": "StatusUpdate", "status": ClientStatus.CLIENT_GOAL}])
                 self.finished_game = True
 
-            self.last_save_time = os.path.getmtime(self.save_path)
+            self.last_save_time = os.path.getmtime(f"{self.save_path}/CNAP")
 
-    async def queue_received_traps(self, content: List[str]):
+    async def queue_received_traps(self):
+        content = self.read_save()
+
         for trap_id in trap_ids:
             if f"{trap_id}=0" in content and (self.traps[f"{trap_id}s_received"] - self.traps[f"{trap_id}s_taken"]) > 0:
                 self.traps[f"{trap_id}s_taken"] += 1
-                self.update_save(f"{trap_id}staken", str(self.traps[f"{trap_id}s_taken"]))
+                self.update_save(f"{trap_id}staken", str(self.traps[f"{trap_id}s_taken"]), file="CNAPClient")
 
                 if f"{trap_id}=0" in content and (self.traps[f"{trap_id}s_received"] - self.traps[f"{trap_id}s_taken"]) >= 1:
                     await asyncio.sleep(15)
                     self.update_save(trap_id)
 
-            # elif trap_id in "hippotrap" and f"mh=0\n" in content and (self.traps["hippotraps_received"] - self.traps["hippotraps_taken"]) > 0:
-            #     self.traps[f"hippotraps_taken"] += 1
-            #     self.update_save("hippotraps_received", str(self.traps["hippotraps_taken"]))
-            #
-            #     if trap_id in "hippotrap" and f"mh=0\n" in content and (self.traps["hippotraps_received"] - self.traps["hippotraps_taken"]) > 1:
-            #         await asyncio.sleep(15)
-            #         self.update_save(trap_id)
-
     # adds received items to the game
-    def update_save(self, game_id: str, new_value="1", item: NetworkItem = None):
-        ucn_save = self.read_save()
+    def update_save(self, game_id: str, new_value="1", item: NetworkItem = None, file="CNAP"):
+        ucn_save = self.read_save(file)
         if ucn_save is not None:
             new_item = True
             for line in ucn_save:
@@ -271,16 +272,18 @@ class UCNContext(CommonContext):
 
             item_handled = False
 
-            ucn_save = [line for line in ucn_save if "\n" != line or ("[" not in line and "CN" in line)]
-
             while True:
                 try:
                     if new_item:
-                        with open(self.save_path, 'a') as fa:
+                        with open(f"{self.save_path}/{file}", 'a') as fa:
                             fa.write(f"\n{game_id}={new_value}")
                             item_handled = True
-                    elif "[CNAP]" == ucn_save[1]:
-                        with open(self.save_path, 'w') as fw:
+                    elif file == "CNAP" and (len(ucn_save) < 3 or "ep=13" not in ucn_save[2]):
+                        self.reset_game_save()
+                        self.resync()
+                        break
+                    else:
+                        with open(f"{self.save_path}/{file}", 'w') as fw:
                             fw.write("\n".join(ucn_save))
                             item_handled = True
 
@@ -292,16 +295,9 @@ class UCNContext(CommonContext):
                         self.items_handled.append(item)
                     break
 
-
     async def send_notification(self):
         while len(self.notifications_inqueue) > 0:
-            while True:
-                try:
-                    with open(self.save_path, 'r') as file:
-                        content = file.read()
-                    break
-                except PermissionError:
-                    pass
+            content = self.read_save()
 
             if "queueitemmessage=1" not in content:
                 new_item = list(self.notifications_inqueue)[0]
@@ -311,55 +307,87 @@ class UCNContext(CommonContext):
                 self.notifications_inqueue.pop(new_item)
             await asyncio.sleep(3)
 
-    # Loads save data when rejoining a lobby
-    def load_save_data(self, args):
+    # Loads client save data when rejoining a lobby
+    def load_client_save(self, args):
         while True:
             try:
-                with open(self.save_path, 'r') as f:
+                with open(f"{self.save_path}/CNAPClient", 'r') as f:
                     lines = [line.rstrip() for line in f.readlines()]
                 break
             except PermissionError:
                 pass
             except FileNotFoundError:
-                self.reset_save(args)
+                self.reset_saves(args)
                 return
 
-        if len(lines) <= 1 or "[CNAP]" not in lines[1] or (
-                "seed_id" in lines[0] and args["slot_data"]["seed_identifier"] not in lines[0].split("=")[1]):
-            self.reset_save(args)
+        if not os.path.exists(f"{self.save_path}/CNAP"):
+            self.reset_saves(args)
+            return
+
+        game_save = self.read_save()
+
+        if "seed_id" in lines[0] and args["slot_data"]["seed_identifier"] not in lines[0].split("=")[1] or \
+          len(game_save) < 3 or "ep=13" not in game_save[2]:
+            self.reset_saves(args)
             return
 
         for line in lines:
             if "trapstaken" in line:
                 self.traps[f"{line.split("taken")[0]}_taken"] = int(line.split("=")[1]) + 1
+            if "dl_progress" in line:
+                self.dl_progress = int(line.split("=")[1])
 
-    # Resets the save for repeat playtroughs
-    def reset_save(self, args):
-        pass
-        while True:
-            try:
-                with open(self.save_path, 'w') as f:
-                    # ep=13: only the golden freddy cutscene plays at 9800 hs, adjust=1: skips adjust volume screen
-                    f.write(f"seed_id={args["slot_data"]["seed_identifier"]}\n"
-                            "[CNAP]\n"
-                            "hs=0\n"
-                            "ep=13\n"
-                            "adjust=1\n"
-                            f"targetpoints={self.target_points}")
-                break
-            except PermissionError:
-                pass
+    # Resets the saves for repeat playtroughs
+    def reset_saves(self, args):
+        self.reset_game_save()
+        self.reset_client_save(args)
 
         if self.save_task is None or self.save_task.done():
             self.save_task = asyncio.create_task(self.save_watcher(), name="save_watcher")
 
-    def read_save(self) -> List[str] | None:
+    def reset_game_save(self):
+        while True:
+            try:
+                with open(f"{self.save_path}/CNAP", 'w') as f:
+                    # ep=13: only the golden freddy cutscene plays at 9800 hs, adjust=1: skips adjust volume screen
+                    f.write("[CNAP]\n"
+                            "hs=0\n"
+                            "ep=13\n"
+                            "adjust=1\n"
+                            f"targetpoints={self.target_points}")
+                    
+                if self.deathlink_active:
+                    with open(f"{self.save_path}/CNAP", 'a') as f:
+                        f.write("\ndeathlinkactive=1")
+                break
+            except PermissionError:
+                pass
+
+    def reset_client_save(self, args):
+        while True:
+            try:
+                with open(f"{self.save_path}/CNAPClient", 'w') as f:
+                    f.write(f"seed_id={args["slot_data"]["seed_identifier"]}")
+                break
+            except PermissionError:
+                pass
+
+    def read_save(self, file="CNAP") -> List[str] | None:
         try:
-            with open(self.save_path, 'r') as fr:
+            with open(f"{self.save_path}/{file}", 'r') as fr:
                 save = [line.rstrip() for line in fr.readlines()]
             return save
         except PermissionError:
             return None
+
+    def resync(self):
+        for item in self.items_received:
+            item_name = self.item_names.lookup_in_game(item.item, "Ultimate Custom Night")
+            if item_data_table[item_name].type != ItemC.progression or item_data_table[item_name].type != ItemC.useful:
+                self.update_save(item_data_table[item_name].game_id)
+
+        if self.save_task is None or self.save_task.done():
+            self.save_task = asyncio.create_task(self.save_watcher(), name="save_watcher")
 
 def get_animatronic_name(scare_id) -> str:
     game_id = scare_id.split("scare")[0]

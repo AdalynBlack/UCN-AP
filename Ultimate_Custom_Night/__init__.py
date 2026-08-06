@@ -145,13 +145,14 @@ class UcnWorld(World):
         self.seed_id += [random.randint(0, 50210) for _ in range(7)]
 
     def create_regions(self) -> None:
+        self.exclude_locations()
+
         # Create regions.
         for region_name in region_data_table.keys():
             region = Region(region_name, self.player, self.multiworld)
             self.multiworld.regions.append(region)
 
         # Create locations.
-        self.exclude_locations()
         target_points = self._get_score_locations()
 
         for region_name, region_data in region_data_table.items():
@@ -181,10 +182,6 @@ class UcnWorld(World):
             region.add_locations(locations, UcnLocation)
             region.add_exits(region_data_table[region_name].connecting_regions)
 
-        # raise OptionError(
-        #     f"Excluded locations: '{self.excluded_locations}'"
-        # )
-
         # Place locked locations.
         for location_name, location_data in locked_locations.items():
             # Ignore locations we never created.
@@ -211,6 +208,8 @@ class UcnWorld(World):
             if random_animatronic not in self.excluded_items:
                 removed_items += self.exclude_animatronic(random_animatronic)
 
+        if "Bonnie" in self.excluded_items and "Foxy" not in self.excluded_items:
+            animatronic_rule_table["Foxy"] = None
 
         if self.max_points < 100:
             for animatronic in secret_scares:
@@ -265,11 +264,14 @@ class UcnWorld(World):
         return removed_items
 
     def fill_slot_data(self) -> Dict[str, object]:
+        target_points = self._get_score_locations() * 100
+        # raise OptionError(f"Target Points:{target_points}")
         return {
             "seed_identifier": "".join(str(i) for i in self.seed_id),
-            "target_points": self.options.target_points.value * 100,
+            "target_points": target_points,
             "vanilla_dd": bool(self.options.vanilla_dd.value),
-            "death_link": bool(self.options.death_link.value)
+            "death_link": bool(self.options.death_link.value),
+            "dl_amnesty": self.options.dl_amnesty.value
         }
 
     def create_item(self, name: str) -> UcnItem:
@@ -278,7 +280,6 @@ class UcnWorld(World):
     def create_event(self, name: str, classification: ItemClassification) -> Item:
         return UcnItem(None, classification, None, self.player)
 
-    # TODO Doesn't change target if it's lower than max
     def _get_score_locations(self) -> int:
         target_points = self.options.target_points.value
         if self.max_points < target_points:

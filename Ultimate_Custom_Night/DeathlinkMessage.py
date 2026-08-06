@@ -175,7 +175,7 @@ def get_deathlink_msg(player: str, scarer: str) :
         ],
         "Molten Freddy": [
             f"{player} got their connection terminated by {scarer}.",
-            f"{player} wasn't ready for Molten Freddy's surprise."
+            f"{player} wasn't ready for Molten Freddy's surprise.",
             f"{player} wasn't ready for round 2."
         ],
         "Scrap Baby": [
@@ -206,7 +206,7 @@ def get_deathlink_msg(player: str, scarer: str) :
         "Nightmare Chica": [
             f"{player} didn't press '4' to save themselves.",
             f"{player} forgot the heater doesn't work on Nightmare Chica here",
-            f"{player} was sure the first night are never really that bad in any of the games."
+            f"{player} was sure the first night is never really that bad in any of the games."
         ]
         # ,
         # "Fredbear": [

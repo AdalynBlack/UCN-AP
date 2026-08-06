@@ -80,9 +80,15 @@ def create_challenge_rule(world: MultiWorld, player: int, location: str):
 def create_scare_rule(world: MultiWorld, player: int, location: str):
     animatronic = location.split(": ")[1]
     if animatronic not in secret_scares.keys():
-        set_rule(world.get_location(location, player), lambda state: has_item(state, animatronic, player))
+        if animatronic == "Music Man":
+            set_rule(world.get_location(location, player), lambda state: has_item(state, "Power Generator", player) and has_item(state, "Music Man", player))
+        else:
+            set_rule(world.get_location(location, player), lambda state: has_item(state, animatronic, player))
     else:
-        set_rule(world.get_location(location, player), lambda state: has_all_animatronics(state, player))
+        if animatronic in ["Bonnet", "Minireenas", "Lolbit"]:
+            set_rule(world.get_location(location, player), lambda state: has_all_animatronics(state, player) and has_item(state, "Power AC", player))
+        else:
+            set_rule(world.get_location(location, player), lambda state: has_all_animatronics(state, player))
 
     # Sets rules on entrances and advancements that are always applied
 def set_scorerules(multiworld: MultiWorld, player: int, max_score: int, hard_logic: bool, gmb: bool):
