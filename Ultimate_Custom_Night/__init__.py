@@ -205,7 +205,8 @@ class UcnWorld(World):
             removed_items += self.exclude_animatronic(animatronic)
 
         while 68 - self.options.target_points.value > removed_items:
-            random_animatronic = random.choice(list(animatronic_rule_table.keys()))
+            random_animatronic = random.choice([animatronic for animatronic, ability in
+                                                animatronic_rule_table.items() if not ability is None])
             if random_animatronic not in self.excluded_items:
                 removed_items += self.exclude_animatronic(random_animatronic)
 
