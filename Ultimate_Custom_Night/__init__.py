@@ -91,7 +91,8 @@ class UcnWorld(World):
 
         starting_character = random.choice([animatronic for animatronic, ability in
                                             animatronic_rule_table.items() if ability is None and
-                                            animatronic not in self.options.exclude_animatronics.value])
+                                            animatronic not in self.options.exclude_animatronics.value and
+                                            animatronic not in self.excluded_items])
 
         self.multiworld.get_location("Starting Character", self.player).place_locked_item(
             self.create_item(items_to_add.pop(items_to_add.index(starting_character)))
