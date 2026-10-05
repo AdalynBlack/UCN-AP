@@ -44,6 +44,7 @@ components.append(Component("FNAF UCN Client", func=start_client, component_type
 class UcnSettings(settings.Group):
     class GamePath(settings.UserFilePath):
         """The path to game exe"""
+        description = '"Ultimate Custom Night.exe"'
         steam_md5 = '8cdac7efc631d81387c64833901f5e80'
         gamejolt_md5 = 'c4cc0cde9956622975b577401b4812ab'
 
@@ -72,6 +73,7 @@ class UcnSettings(settings.Group):
 
     class SavePath(settings.UserFolderPath):
         """The path to the save folder, named \"MMFApplications\""""
+        description = '"MMFApplications" (usually in %appdata%)'
         
         @classmethod
         def validate(cls, path: str) -> None:
