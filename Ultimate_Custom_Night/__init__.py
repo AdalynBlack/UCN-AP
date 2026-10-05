@@ -1,4 +1,6 @@
 import random
+import os
+from typing import BinaryIO
 
 from .Regions import region_data_table
 from .Rules import set_scorerules, set_scaresanity_rules, set_challenge_rules
@@ -10,9 +12,11 @@ from worlds.LauncherComponents import Component, components, Type, launch_subpro
 from multiprocessing import Process
 from typing import List, Mapping, Any, Dict
 from Options import OptionError
+import settings
 
 from BaseClasses import Region, Tutorial
 from worlds.AutoWorld import WebWorld, World
+
 from .Regions import region_data_table
 from .Items import (
     UcnItem,
@@ -36,6 +40,22 @@ def start_client():
 
 
 components.append(Component("FNAF UCN Client", func=start_client, component_type=Type.CLIENT))
+
+class UcnSettings(settings.Group):
+    class GamePath(settings.UserFilePath):
+        """The path to game exe"""
+        md5s = ['8cdac7efc631d81387c64833901f5e80', 'c4cc0cde9956622975b577401b4812ab']
+
+    class SavePath(settings.UserFolderPath):
+        """The path to the save folder, named \"MMFApplications\""""
+        
+        @classmethod
+        def validate(cls, path: str) -> None:
+            if os.path.basename(path) != 'MMFApplications':
+                raise ValueError(f'Selected path "{path}" is not "MMFApplications"')
+
+    game_path: GamePath = GamePath('C:/Program Files (x86)/Steam/steamapps/common/Ultimate Custom Night/Ultimate Custom Night.exe')
+    save_path: SavePath = SavePath('AppData/Roaming/MMFApplications')
 
 
 class UcnLocation(Location):
@@ -68,6 +88,7 @@ class UcnWorld(World):
     gmb_in_pool = True
     location_name_to_id = location_table
     item_name_to_id = item_table
+    settings: UcnSettings
 
     max_points = 100
 
