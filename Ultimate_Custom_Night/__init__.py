@@ -44,7 +44,31 @@ components.append(Component("FNAF UCN Client", func=start_client, component_type
 class UcnSettings(settings.Group):
     class GamePath(settings.UserFilePath):
         """The path to game exe"""
-        md5s = ['8cdac7efc631d81387c64833901f5e80', 'c4cc0cde9956622975b577401b4812ab']
+        steam_md5 = '8cdac7efc631d81387c64833901f5e80'
+        gamejolt_md5 = 'c4cc0cde9956622975b577401b4812ab'
+
+        is_gamejolt = False
+
+        @classmethod
+        def _validate_stream_hashes(cls, f: BinaryIO) -> None:
+            """Helper to efficiently validate stream against hashes
+            and determine gamejolt vs steam"""
+            pos = f.tell()
+            try:
+                from hashlib import md5
+                file_md5 = md5()
+                block = bytearray(64*1024)
+                view = memoryview(block)
+                while n := f.readinto(view):  # type: ignore
+                    file_md5.update(view[:n])
+                file_md5_hex = file_md5.hexdigest()
+
+                if cls.gamejolt_md5 == file_md5_hex:
+                    cls.is_gamejolt = True
+                elif cls.steam_md5 != file_md5_hex:
+                    raise ValueError(f'Hashes do not match for {cls.__name__}')
+            finally:
+                f.seek(pos)
 
     class SavePath(settings.UserFolderPath):
         """The path to the save folder, named \"MMFApplications\""""

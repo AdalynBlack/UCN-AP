@@ -419,7 +419,8 @@ def get_animatronic_name(scare_id) -> str:
 
 def get_patch():
     import pkgutil
-    return pkgutil.get_data(__name__, "/patch/UCNAP.bsdiff")
+    patch_name = 'Gamejolt.Patch.bsdiff' if get_settings()['ucn_options']['game_path'].is_gamejolt else 'UCNAP.bsdiff'
+    return pkgutil.get_data(__name__, f"/patch/{patch_name}")
 
 
 def main():
