@@ -66,7 +66,9 @@ class UcnSettings(settings.Group):
 
                 if cls.gamejolt_md5 == file_md5_hex:
                     cls.is_gamejolt = True
-                elif cls.steam_md5 != file_md5_hex:
+                elif cls.steam_md5 == file_md5_hex:
+                    cls.is_gamejolt = False
+                else:
                     raise ValueError(f'Hashes do not match for {cls.__name__}')
             finally:
                 f.seek(pos)
