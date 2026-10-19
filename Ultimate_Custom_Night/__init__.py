@@ -79,7 +79,7 @@ class UcnSettings(settings.Group):
         
         @classmethod
         def validate(cls, path: str) -> None:
-            if os.path.basename(path) != 'MMFApplications':
+            if os.path.basename(os.path.abspath(path)) != 'MMFApplications':
                 raise ValueError(f'Selected path "{path}" is not "MMFApplications"')
 
     game_path: GamePath = GamePath('C:/Program Files (x86)/Steam/steamapps/common/Ultimate Custom Night/Ultimate Custom Night.exe')
