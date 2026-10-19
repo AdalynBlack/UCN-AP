@@ -88,6 +88,12 @@ class UCNContext(CommonContext):
             if is_windows_path:
                 get_settings()['ucn_options']['game_path'] = '.steam/steam/steamapps/common/Ultimate Custom Night/Ultimate Custom Night.exe'
 
+        save_path = get_settings()['ucn_options']['save_path']
+        get_settings()['ucn_options']['save_path'] = os.path.abspath(save_path)
+
+        game_path = get_settings()['ucn_options']['game_path']
+        get_settings()['ucn_options']['game_path'] = os.path.abspath(game_path)
+
         self.last_save_time = 0
         self.save_task = asyncio.create_task(self.save_watcher(), name="save_watcher")
         self.notiff_task: Task | None = None
